@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BillCraft — Smart Bill Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root {
+    --ink: #0f0f0f;
+    --paper: #faf8f3;
+    --cream: #f2ede3;
+    --gold: #c9992a;
+    --gold-light: #f0d98a;
+    --rust: #c0392b;
+    --teal: #1a7a6e;
+    --teal-light: #e8f5f3;
+    --mid: #6b6560;
+    --border: #ddd8cc;
+    --shadow: 0 4px 24px rgba(15,15,15,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--ink);
+    color: #fff;
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 3px solid var(--gold);
+  }
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.7rem;
+    letter-spacing: -0.5px;
+    color: var(--gold-light);
+  }
+  .logo span { color: #fff; }
+  .header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    background: var(--cream);
+    border-bottom: 2px solid var(--border);
+    padding: 0 40px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 14px 28px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--mid);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--gold); }
+  .tab:hover:not(.active) { color: var(--ink); background: rgba(0,0,0,0.04); }
+
+  /* ── Layout ── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 120px);
+  }
+  .panel {
+    background: var(--cream);
+    border-right: 2px solid var(--border);
+    padding: 32px;
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+  }
+  .preview-area {
+    padding: 40px;
+    background: #e8e4dc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+  }
+
+  /* ── Form elements ── */
+  .section-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.1rem;
+    color: var(--ink);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title .icon { font-size: 1rem; }
+  .form-section { margin-bottom: 28px; }
+
+  label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--mid);
+    margin-bottom: 5px;
+  }
+  input, textarea, select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    background: #fff;
+    color: var(--ink);
+    transition: border-color 0.2s;
+    margin-bottom: 12px;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--teal);
+  }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── Color picker ── */
+  .color-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .color-swatch {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .color-swatch:hover, .color-swatch.active { transform: scale(1.2); border-color: var(--ink); }
+  input[type="color"] { padding: 3px; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; flex-shrink: 0; }
+
+  /* ── Items table ── */
+  .items-list { margin-bottom: 12px; }
+  .item-row {
+    display: grid;
+    grid-template-columns: 1fr 70px 80px 70px 36px;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+    animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .item-row input { margin-bottom: 0; font-size: 0.85rem; padding: 7px 8px; }
+  .item-row .del-btn {
+    background: #fde8e8;
+    border: none;
+    border-radius: 6px;
+    width: 32px; height: 32px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--rust);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .item-row .del-btn:hover { background: #fbbaba; }
+  .items-header {
+    display: grid;
+    grid-template-columns: 1fr 70px 80px 70px 36px;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--mid);
+    margin-bottom: 6px;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.18s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: #2a2a2a; transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+  .btn-ghost:hover { background: var(--cream); }
+  .btn-gold { background: var(--gold); color: #fff; }
+  .btn-gold:hover { background: #b8881e; transform: translateY(-1px); }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-teal:hover { background: #155f55; transform: translateY(-1px); }
+  .btn-sm { padding: 7px 12px; font-size: 0.8rem; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* ── Download dropdown ── */
+  .dl-group { position: relative; display: inline-flex; }
+  .dl-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #fff;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    min-width: 200px;
+    z-index: 200;
+    overflow: hidden;
+    display: none;
+  }
+  .dl-menu.open { display: block; animation: fadeIn 0.15s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .dl-item {
+    padding: 11px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background 0.12s;
+  }
+  .dl-item:hover { background: var(--cream); }
+  .dl-item .ext-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--mid);
+  }
+
+  /* ── Bill Preview ── */
+  .bill-preview {
+    background: #fff;
+    width: 100%;
+    max-width: 600px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    position: relative;
+  }
+  .bill-header-bar {
+    padding: 32px 36px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .bill-logo-text {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.5rem;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+  .bill-type-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-top: 4px;
+    display: inline-block;
+  }
+  .bill-meta { text-align: right; }
+  .bill-invoice-label {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    color: #ccc;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+  }
+  .bill-num { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #555; }
+
+  .bill-divider { height: 4px; width: 100%; }
+
+  .bill-addresses {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 24px 36px;
+    background: #fafafa;
+  }
+  .bill-address-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #999;
+    margin-bottom: 4px;
+  }
+  .bill-address-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }
+  .bill-address-detail { font-size: 0.82rem; color: #666; line-height: 1.5; }
+
+  .bill-dates {
+    display: flex;
+    gap: 32px;
+    padding: 12px 36px;
+    background: #f5f5f5;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+  }
+  .bill-date-item { font-size: 0.82rem; color: #666; }
+  .bill-date-item strong { color: #333; display: block; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1px; }
+
+  .bill-table { width: 100%; border-collapse: collapse; }
+  .bill-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #fff;
+  }
+  .bill-table th:last-child { text-align: right; }
+  .bill-table tbody tr { border-bottom: 1px solid #f0f0f0; }
+  .bill-table tbody tr:last-child { border-bottom: none; }
+  .bill-table td {
+    padding: 11px 14px;
+    font-size: 0.875rem;
+    color: #333;
+  }
+  .bill-table td:last-child { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; }
+  .bill-table td.qty, .bill-table td.rate { font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: #666; }
+
+  .bill-table-wrap { padding: 0 36px 16px; }
+
+  .bill-totals {
+    padding: 16px 36px 0;
+    border-top: 2px solid #f0f0f0;
+  }
+  .bill-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.875rem;
+    color: #555;
+  }
+  .bill-total-row.grand {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #111;
+    border-top: 2px solid #111;
+    margin-top: 6px;
+    padding-top: 10px;
+  }
+  .bill-total-row .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .bill-notes {
+    margin: 16px 36px;
+    padding: 14px;
+    background: #fafafa;
+    border-radius: 6px;
+    border-left: 3px solid #ddd;
+    font-size: 0.82rem;
+    color: #666;
+    line-height: 1.5;
+  }
+  .bill-footer {
+    padding: 18px 36px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: #aaa;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  /* ── Specific bill type extras ── */
+  .travel-extras {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 14px 36px;
+    background: #f9f9f9;
+    border-bottom: 1px solid #eee;
+  }
+  .travel-extra-item { font-size: 0.8rem; color: #555; }
+  .travel-extra-item strong { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 2px; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+  /* ── Toggle for bill type indicator ── */
+  .type-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .type-btn {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.82rem;
+    transition: all 0.2s;
+    color: var(--mid);
+  }
+  .type-btn .emoji { display: block; font-size: 1.4rem; margin-bottom: 3px; }
+  .type-btn.active { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+
+  @media (max-width: 900px) {
+    .workspace { grid-template-columns: 1fr; }
+    .panel { max-height: none; border-right: none; border-bottom: 2px solid var(--border); }
+    .preview-area { max-height: none; }
+    .tabs { padding: 0 16px; }
+    header { padding: 14px 20px; }
+    .header-actions .btn { font-size: 0.78rem; padding: 8px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Bill<span>Craft</span></div>
+  <div class="header-actions">
+    <button class="btn btn-ghost btn-sm" onclick="resetBill()">↺ Reset</button>
+    <div class="dl-group">
+      <button class="btn btn-gold btn-sm" onclick="toggleDlMenu()">⬇ Download ▾</button>
+      <div class="dl-menu" id="dlMenu">
+        <div class="dl-item" onclick="downloadAs('pdf')">
+          <span>📄</span> <span>PDF Document</span> <span class="ext-badge">.pdf</span>
+        </div>
+        <div class="dl-item" onclick="downloadAs('html')">
+          <span>🌐</span> <span>HTML File</span> <span class="ext-badge">.html</span>
+        </div>
+        <div class="dl-item" onclick="downloadAs('csv')">
+          <span>📊</span> <span>CSV Spreadsheet</span> <span class="ext-badge">.csv</span>
+        </div>
+        <div class="dl-item" onclick="downloadAs('json')">
+          <span>🔧</span> <span>JSON Data</span> <span class="ext-badge">.json</span>
+        </div>
+        <div class="dl-item" onclick="downloadAs('txt')">
+          <span>📝</span> <span>Plain Text</span> <span class="ext-badge">.txt</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('basic', this)">📋 Basic Info</button>
+  <button class="tab" onclick="switchTab('items', this)">🧾 Line Items</button>
+  <button class="tab" onclick="switchTab('style', this)">🎨 Style</button>
+  <button class="tab" onclick="switchTab('extras', this)">⚙️ Extras</button>
+</div>
+
+<div class="workspace">
+  <!-- LEFT PANEL -->
+  <div class="panel" id="panelBasic">
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🏷️</span> Bill Type</div>
+      <div class="type-selector">
+        <div class="type-btn active" onclick="setBillType('food', this)">
+          <span class="emoji">🍽️</span>Food Bill
+        </div>
+        <div class="type-btn" onclick="setBillType('travel', this)">
+          <span class="emoji">✈️</span>Travel Bill
+        </div>
+        <div class="type-btn" onclick="setBillType('general', this)">
+          <span class="emoji">📄</span>General
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🏢</span> Your Business</div>
+      <label>Business / Restaurant Name</label>
+      <input type="text" id="bizName" value="The Grand Bistro" oninput="renderBill()" />
+      <label>Address</label>
+      <textarea id="bizAddr" oninput="renderBill()">12 Culinary Lane, Mumbai 400001
+Maharashtra, India</textarea>
+      <div class="row-2">
+        <div>
+          <label>Phone</label>
+          <input type="text" id="bizPhone" value="+91 98765 43210" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input type="text" id="bizEmail" value="info@grandbistro.com" oninput="renderBill()" />
+        </div>
+      </div>
+      <label>GST / Tax ID (optional)</label>
+      <input type="text" id="bizTax" value="22AAAAA0000A1Z5" oninput="renderBill()" />
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">👤</span> Customer Info</div>
+      <label>Customer Name</label>
+      <input type="text" id="custName" value="Rahul Sharma" oninput="renderBill()" />
+      <label>Address / Details</label>
+      <textarea id="custAddr" oninput="renderBill()">Flat 42, Sunshine Apartments
+Bandra West, Mumbai 400050</textarea>
+      <div class="row-2">
+        <div>
+          <label>Phone</label>
+          <input type="text" id="custPhone" value="+91 87654 32109" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input type="text" id="custEmail" value="rahul@email.com" oninput="renderBill()" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">📅</span> Bill Details</div>
+      <div class="row-2">
+        <div>
+          <label>Invoice #</label>
+          <input type="text" id="invoiceNum" value="INV-2025-0042" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Currency Symbol</label>
+          <input type="text" id="currency" value="₹" oninput="renderBill()" />
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label>Bill Date</label>
+          <input type="date" id="billDate" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Due Date</label>
+          <input type="date" id="dueDate" oninput="renderBill()" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ITEMS TAB -->
+  <div class="panel" id="panelItems" style="display:none">
+    <div class="form-section">
+      <div class="section-title"><span class="icon">📦</span> Line Items</div>
+      <div class="items-header">
+        <span>Description</span><span>Qty</span><span>Rate</span><span>Total</span><span></span>
+      </div>
+      <div class="items-list" id="itemsList"></div>
+      <button class="btn btn-ghost btn-sm btn-full" onclick="addItem()">+ Add Item</button>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🧮</span> Charges & Discounts</div>
+      <div class="row-2">
+        <div>
+          <label>Tax Rate (%)</label>
+          <input type="number" id="taxRate" value="18" min="0" max="100" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Discount (%)</label>
+          <input type="number" id="discountRate" value="0" min="0" max="100" oninput="renderBill()" />
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label>Tip / Service (%)</label>
+          <input type="number" id="tipRate" value="5" min="0" max="100" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Extra Fee (flat)</label>
+          <input type="number" id="extraFee" value="0" min="0" oninput="renderBill()" />
+        </div>
+      </div>
+      <label>Extra Fee Label</label>
+      <input type="text" id="extraFeeLabel" value="Delivery Charge" oninput="renderBill()" />
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">💳</span> Payment</div>
+      <label>Payment Method</label>
+      <select id="paymentMethod" onchange="renderBill()">
+        <option>Cash</option>
+        <option>UPI / GPay</option>
+        <option>Credit Card</option>
+        <option>Debit Card</option>
+        <option>Net Banking</option>
+        <option>Cheque</option>
+        <option>Online Transfer</option>
+      </select>
+      <label>Payment Status</label>
+      <select id="paymentStatus" onchange="renderBill()">
+        <option>Paid</option>
+        <option>Pending</option>
+        <option>Partially Paid</option>
+        <option>Overdue</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- STYLE TAB -->
+  <div class="panel" id="panelStyle" style="display:none">
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🎨</span> Accent Color</div>
+      <div class="color-row">
+        <div class="color-swatch active" style="background:#1a7a6e" onclick="setAccent('#1a7a6e', this)"></div>
+        <div class="color-swatch" style="background:#c9992a" onclick="setAccent('#c9992a', this)"></div>
+        <div class="color-swatch" style="background:#c0392b" onclick="setAccent('#c0392b', this)"></div>
+        <div class="color-swatch" style="background:#2980b9" onclick="setAccent('#2980b9', this)"></div>
+        <div class="color-swatch" style="background:#8e44ad" onclick="setAccent('#8e44ad', this)"></div>
+        <div class="color-swatch" style="background:#2c3e50" onclick="setAccent('#2c3e50', this)"></div>
+        <input type="color" id="customColor" value="#1a7a6e" oninput="setAccent(this.value, null)" title="Custom color" />
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">✏️</span> Fonts</div>
+      <label>Header Font</label>
+      <select id="headerFont" onchange="renderBill()">
+        <option value="'DM Serif Display', serif">DM Serif Display</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+        <option value="'Courier New', monospace">Courier New (Retro)</option>
+      </select>
+      <label>Body Font</label>
+      <select id="bodyFont" onchange="renderBill()">
+        <option value="'DM Sans', sans-serif">DM Sans</option>
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="'Times New Roman', serif">Times New Roman</option>
+        <option value="Verdana, sans-serif">Verdana</option>
+      </select>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🔲</span> Layout</div>
+      <label>Paper Size</label>
+      <select id="paperSize" onchange="renderBill()">
+        <option value="a4">A4</option>
+        <option value="letter">Letter</option>
+        <option value="a5">A5 (Compact)</option>
+      </select>
+      <label>Bill Orientation</label>
+      <select id="orientation" onchange="renderBill()">
+        <option>Portrait</option>
+        <option>Landscape</option>
+      </select>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🔒</span> Watermark</div>
+      <div class="row-2">
+        <div>
+          <label>Show Watermark</label>
+          <select id="showWatermark" onchange="renderBill()">
+            <option value="0">None</option>
+            <option value="1">PAID</option>
+            <option value="2">DRAFT</option>
+            <option value="3">CONFIDENTIAL</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXTRAS TAB -->
+  <div class="panel" id="panelExtras" style="display:none">
+    <div class="form-section" id="travelExtrasSection" style="display:none">
+      <div class="section-title"><span class="icon">✈️</span> Travel Details</div>
+      <div class="row-2">
+        <div>
+          <label>From City</label>
+          <input type="text" id="travelFrom" value="Mumbai" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>To City</label>
+          <input type="text" id="travelTo" value="Delhi" oninput="renderBill()" />
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label>Travel Date</label>
+          <input type="date" id="travelDate" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>Return Date</label>
+          <input type="date" id="returnDate" oninput="renderBill()" />
+        </div>
+      </div>
+      <div class="row-2">
+        <div>
+          <label>Mode of Travel</label>
+          <select id="travelMode" onchange="renderBill()">
+            <option>Flight</option>
+            <option>Train</option>
+            <option>Bus</option>
+            <option>Car / Taxi</option>
+            <option>Ship / Cruise</option>
+          </select>
+        </div>
+        <div>
+          <label>No. of Passengers</label>
+          <input type="number" id="travelPassengers" value="1" min="1" oninput="renderBill()" />
+        </div>
+      </div>
+      <label>Booking Reference</label>
+      <input type="text" id="bookingRef" value="BKG-2025-XY42" oninput="renderBill()" />
+    </div>
+
+    <div class="form-section" id="foodExtrasSection">
+      <div class="section-title"><span class="icon">🍽️</span> Food Bill Details</div>
+      <div class="row-2">
+        <div>
+          <label>Table No.</label>
+          <input type="text" id="tableNo" value="Table 7" oninput="renderBill()" />
+        </div>
+        <div>
+          <label>No. of Guests</label>
+          <input type="number" id="numGuests" value="2" min="1" oninput="renderBill()" />
+        </div>
+      </div>
+      <label>Waiter / Server</label>
+      <input type="text" id="waiterName" value="Ravi Kumar" oninput="renderBill()" />
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">📝</span> Notes & Footer</div>
+      <label>Bill Notes</label>
+      <textarea id="billNotes" oninput="renderBill()">Thank you for dining with us! We hope to see you again soon.</textarea>
+      <label>Footer Text</label>
+      <input type="text" id="footerText" value="All prices are inclusive of applicable taxes." oninput="renderBill()" />
+    </div>
+
+    <div class="form-section">
+      <div class="section-title"><span class="icon">🔗</span> Social / Website</div>
+      <label>Website</label>
+      <input type="text" id="bizWeb" value="www.grandbistro.com" oninput="renderBill()" />
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="preview-area">
+    <div style="font-size:0.78rem;color:#888;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Live Preview</div>
+    <div class="bill-preview" id="billPreview"></div>
+    <button class="btn btn-teal" onclick="toggleDlMenu()">⬇ Download This Bill</button>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let billType = 'food';
+let accentColor = '#1a7a6e';
+let items = [
+  { desc: 'Butter Chicken (Full)', qty: 2, rate: 380 },
+  { desc: 'Garlic Naan', qty: 4, rate: 60 },
+  { desc: 'Dal Makhani', qty: 1, rate: 280 },
+  { desc: 'Mango Lassi', qty: 2, rate: 120 },
+];
+
+// ─── Init ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().split('T')[0];
+  const due = new Date(Date.now() + 7*86400000).toISOString().split('T')[0];
+  document.getElementById('billDate').value = today;
+  document.getElementById('dueDate').value = due;
+  document.getElementById('travelDate').value = today;
+  document.getElementById('returnDate').value = due;
+  renderItems();
+  renderBill();
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dl-group')) {
+      document.getElementById('dlMenu').classList.remove('open');
+    }
+  });
+});
+
+// ─── Tab Switching ────────────────────────────────────────
+function switchTab(tab, el) {
+  ['Basic','Items','Style','Extras'].forEach(t => {
+    document.getElementById('panel'+t).style.display = 'none';
+  });
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.display = 'block';
+  el.classList.add('active');
+}
+
+// ─── Bill Type ────────────────────────────────────────────
+function setBillType(type, el) {
+  billType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+
+  const foodSec = document.getElementById('foodExtrasSection');
+  const travelSec = document.getElementById('travelExtrasSection');
+  if (type === 'travel') {
+    travelSec.style.display = 'block';
+    foodSec.style.display = 'none';
+    // Prefill travel items
+    items = [
+      { desc: 'Flight Ticket (Economy)', qty: 1, rate: 5500 },
+      { desc: 'Hotel (2 nights)', qty: 2, rate: 3200 },
+      { desc: 'Airport Transfer', qty: 2, rate: 800 },
+      { desc: 'Meal Allowance', qty: 2, rate: 500 },
+    ];
+    document.getElementById('bizName').value = 'SkyWay Travel Agency';
+    document.getElementById('billNotes').value = 'Please retain this receipt for expense reimbursement. Cancellation policy applies as per booking terms.';
+    document.getElementById('extraFeeLabel').value = 'Service Fee';
+    document.getElementById('tipRate').value = '0';
+    renderItems();
+  } else if (type === 'food') {
+    travelSec.style.display = 'none';
+    foodSec.style.display = 'block';
+    items = [
+      { desc: 'Butter Chicken (Full)', qty: 2, rate: 380 },
+      { desc: 'Garlic Naan', qty: 4, rate: 60 },
+      { desc: 'Dal Makhani', qty: 1, rate: 280 },
+      { desc: 'Mango Lassi', qty: 2, rate: 120 },
+    ];
+    document.getElementById('bizName').value = 'The Grand Bistro';
+    document.getElementById('billNotes').value = 'Thank you for dining with us! We hope to see you again soon.';
+    document.getElementById('extraFeeLabel').value = 'Delivery Charge';
+    document.getElementById('tipRate').value = '5';
+    renderItems();
+  } else {
+    travelSec.style.display = 'none';
+    foodSec.style.display = 'none';
+    items = [
+      { desc: 'Professional Services', qty: 10, rate: 2000 },
+      { desc: 'Consultation', qty: 2, rate: 5000 },
+    ];
+    document.getElementById('bizName').value = 'Pro Services Ltd.';
+    document.getElementById('billNotes').value = 'Payment due within 30 days. Thank you for your business.';
+    document.getElementById('tipRate').value = '0';
+    renderItems();
+  }
+  renderBill();
+}
+
+// ─── Accent Color ─────────────────────────────────────────
+function setAccent(color, el) {
+  accentColor = color;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderBill();
+}
+
+// ─── Items ────────────────────────────────────────────────
+function renderItems() {
+  const list = document.getElementById('itemsList');
+  list.innerHTML = '';
+  items.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <input type="text" placeholder="Description" value="${item.desc}" oninput="updateItem(${i},'desc',this.value)" />
+      <input type="number" placeholder="1" value="${item.qty}" min="0" oninput="updateItem(${i},'qty',+this.value)" />
+      <input type="number" placeholder="0" value="${item.rate}" min="0" step="0.01" oninput="updateItem(${i},'rate',+this.value)" />
+      <input type="text" readonly value="${(item.qty * item.rate).toFixed(2)}" style="background:#f5f5f5;color:#555" />
+      <button class="del-btn" onclick="removeItem(${i})">✕</button>
+    `;
+    list.appendChild(row);
+  });
+}
+function updateItem(i, field, val) {
+  items[i][field] = val;
+  renderItems();
+  renderBill();
+}
+function addItem() {
+  items.push({ desc: '', qty: 1, rate: 0 });
+  renderItems();
+  renderBill();
+}
+function removeItem(i) {
+  items.splice(i, 1);
+  renderItems();
+  renderBill();
+}
+
+// ─── Totals Calculation ───────────────────────────────────
+function calcTotals() {
+  const cur = v('currency') || '₹';
+  const subtotal = items.reduce((s, it) => s + it.qty * it.rate, 0);
+  const discRate = +v('discountRate') / 100;
+  const discount = subtotal * discRate;
+  const afterDisc = subtotal - discount;
+  const taxRate = +v('taxRate') / 100;
+  const tax = afterDisc * taxRate;
+  const tipRate = +v('tipRate') / 100;
+  const tip = afterDisc * tipRate;
+  const extra = +v('extraFee') || 0;
+  const grand = afterDisc + tax + tip + extra;
+  return { subtotal, discount, afterDisc, tax, tip, extra, grand, cur };
+}
+
+function v(id) { return document.getElementById(id)?.value || ''; }
+function fmt(n, cur) { return cur + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+// ─── Render Bill ──────────────────────────────────────────
+function renderBill() {
+  const t = calcTotals();
+  const accent = accentColor;
+  const lightAccent = accent + '18';
+  const hFont = v('headerFont') || "'DM Serif Display', serif";
+  const bFont = v('bodyFont') || "'DM Sans', sans-serif";
+  const watermarkMap = { '0': '', '1': 'PAID', '2': 'DRAFT', '3': 'CONFIDENTIAL' };
+  const watermark = watermarkMap[v('showWatermark')] || '';
+
+  const typeLabels = { food: '🍽️ Food Bill', travel: '✈️ Travel Bill', general: '📄 Invoice' };
+  const typeBadge = typeLabels[billType] || '📄 Invoice';
+
+  let travelBlock = '';
+  if (billType === 'travel') {
+    travelBlock = `
+    <div class="travel-extras">
+      <div class="travel-extra-item"><strong>From</strong>${v('travelFrom') || '—'}</div>
+      <div class="travel-extra-item"><strong>To</strong>${v('travelTo') || '—'}</div>
+      <div class="travel-extra-item"><strong>Travel Date</strong>${v('travelDate') || '—'}</div>
+      <div class="travel-extra-item"><strong>Return Date</strong>${v('returnDate') || '—'}</div>
+      <div class="travel-extra-item"><strong>Mode</strong>${v('travelMode') || '—'}</div>
+      <div class="travel-extra-item"><strong>Passengers</strong>${v('travelPassengers') || 1}</div>
+      <div class="travel-extra-item" style="grid-column:span 2"><strong>Booking Ref</strong>${v('bookingRef') || '—'}</div>
+    </div>`;
+  }
+
+  let foodExtras = '';
+  if (billType === 'food') {
+    foodExtras = `
+      <div style="padding:8px 36px;background:#fafafa;border-bottom:1px solid #eee;display:flex;gap:24px;font-size:0.8rem;color:#666">
+        <span><strong style="color:#333">Table:</strong> ${v('tableNo') || '—'}</span>
+        <span><strong style="color:#333">Guests:</strong> ${v('numGuests') || '—'}</span>
+        <span><strong style="color:#333">Server:</strong> ${v('waiterName') || '—'}</span>
+      </div>`;
+  }
+
+  const statusColors = {
+    'Paid': '#16a34a', 'Pending': '#d97706', 'Partially Paid': '#2563eb', 'Overdue': '#dc2626'
+  };
+  const statusColor = statusColors[v('paymentStatus')] || '#555';
+
+  const billHtml = `
+  <div style="position:relative;font-family:${bFont}">
+    ${watermark ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:5rem;font-weight:900;color:${accent}18;letter-spacing:4px;z-index:0;pointer-events:none;white-space:nowrap">${watermark}</div>` : ''}
+    <div style="position:relative;z-index:1">
+      <div class="bill-header-bar" style="background:${accent}">
+        <div>
+          <div class="bill-logo-text" style="color:#fff;font-family:${hFont}">${v('bizName') || 'Business Name'}</div>
+          <div class="bill-type-badge" style="background:rgba(255,255,255,0.2);color:#fff">${typeBadge}</div>
+        </div>
+        <div class="bill-meta">
+          <div class="bill-invoice-label" style="color:rgba(255,255,255,0.3);font-family:${hFont}">BILL</div>
+          <div class="bill-num" style="color:rgba(255,255,255,0.9)">${v('invoiceNum') || 'INV-0001'}</div>
+          <div style="margin-top:8px">
+            <span style="background:${statusColor};color:#fff;font-size:0.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;border-radius:20px">${v('paymentStatus') || 'Pending'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bill-divider" style="background:${accent}"></div>
+
+      <div class="bill-addresses">
+        <div>
+          <div class="bill-address-label">From</div>
+          <div class="bill-address-name">${v('bizName') || 'Your Business'}</div>
+          <div class="bill-address-detail">${(v('bizAddr') || '').replace(/\n/g,'<br>')}</div>
+          <div class="bill-address-detail" style="margin-top:4px">📞 ${v('bizPhone') || ''} &nbsp;|&nbsp; ${v('bizEmail') || ''}</div>
+          ${v('bizTax') ? `<div class="bill-address-detail">GST: ${v('bizTax')}</div>` : ''}
+          ${v('bizWeb') ? `<div class="bill-address-detail">🌐 ${v('bizWeb')}</div>` : ''}
+        </div>
+        <div>
+          <div class="bill-address-label">Bill To</div>
+          <div class="bill-address-name">${v('custName') || 'Customer Name'}</div>
+          <div class="bill-address-detail">${(v('custAddr') || '').replace(/\n/g,'<br>')}</div>
+          <div class="bill-address-detail" style="margin-top:4px">📞 ${v('custPhone') || ''}</div>
+          <div class="bill-address-detail">${v('custEmail') || ''}</div>
+        </div>
+      </div>
+
+      <div class="bill-dates">
+        <div class="bill-date-item"><strong>Bill Date</strong>${v('billDate') || '—'}</div>
+        <div class="bill-date-item"><strong>Due Date</strong>${v('dueDate') || '—'}</div>
+        <div class="bill-date-item"><strong>Payment</strong>${v('paymentMethod') || 'Cash'}</div>
+      </div>
+
+      ${travelBlock}
+      ${foodExtras}
+
+      <div class="bill-table-wrap" style="margin-top:8px">
+        <table class="bill-table">
+          <thead>
+            <tr style="background:${accent}">
+              <th style="border-radius:6px 0 0 0">#</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th style="border-radius:0 6px 0 0">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((it, i) => `
+              <tr style="background:${i%2===0?'#fff':'#fafafa'}">
+                <td style="color:#aaa;font-size:0.78rem">${i+1}</td>
+                <td>${it.desc || '—'}</td>
+                <td class="qty">${it.qty}</td>
+                <td class="rate">${fmt(it.rate, t.cur)}</td>
+                <td>${fmt(it.qty * it.rate, t.cur)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bill-totals">
+        <div class="bill-total-row"><span>Subtotal</span><span class="mono">${fmt(t.subtotal, t.cur)}</span></div>
+        ${t.discount > 0 ? `<div class="bill-total-row" style="color:#16a34a"><span>Discount (${v('discountRate')}%)</span><span class="mono">− ${fmt(t.discount, t.cur)}</span></div>` : ''}
+        ${t.tax > 0 ? `<div class="bill-total-row"><span>Tax (${v('taxRate')}%)</span><span class="mono">${fmt(t.tax, t.cur)}</span></div>` : ''}
+        ${t.tip > 0 ? `<div class="bill-total-row"><span>Service / Tip (${v('tipRate')}%)</span><span class="mono">${fmt(t.tip, t.cur)}</span></div>` : ''}
+        ${t.extra > 0 ? `<div class="bill-total-row"><span>${v('extraFeeLabel') || 'Extra'}</span><span class="mono">${fmt(t.extra, t.cur)}</span></div>` : ''}
+        <div class="bill-total-row grand"><span>Grand Total</span><span class="mono" style="color:${accent}">${fmt(t.grand, t.cur)}</span></div>
+      </div>
+
+      ${v('billNotes') ? `<div class="bill-notes">📝 ${v('billNotes')}</div>` : ''}
+
+      <div class="bill-footer" style="border-top:3px solid ${accent}">
+        ${v('footerText') || ''}<br/>
+        <span style="color:${accent};font-weight:600">Thank you for your business!</span>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('billPreview').innerHTML = billHtml;
+}
+
+// ─── Download ──────────────────────────────────────────────
+function toggleDlMenu() {
+  document.getElementById('dlMenu').classList.toggle('open');
+}
+
+function downloadAs(fmt) {
+  document.getElementById('dlMenu').classList.remove('open');
+  const name = (v('bizName') || 'Bill').replace(/\s+/g, '_');
+  const num = (v('invoiceNum') || 'INV').replace(/[^a-zA-Z0-9-]/g, '');
+
+  if (fmt === 'pdf') downloadPDF(name, num);
+  else if (fmt === 'html') downloadHTML(name, num);
+  else if (fmt === 'csv') downloadCSV(name, num);
+  else if (fmt === 'json') downloadJSON(name, num);
+  else if (fmt === 'txt') downloadTXT(name, num);
+}
+
+function downloadPDF(name, num) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const t = calcTotals();
+  const pageW = doc.internal.pageSize.getWidth();
+  const accent = accentColor;
+
+  // Header bar
+  doc.setFillColor(accent);
+  doc.rect(0, 0, pageW, 36, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(v('bizName') || 'Business', 12, 15);
+  doc.setFontSize(8);
+  doc.text(billType.toUpperCase() + ' BILL', 12, 22);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(v('invoiceNum') || 'INV-001', pageW - 12, 15, { align: 'right' });
+  doc.text('Status: ' + (v('paymentStatus') || 'Pending'), pageW - 12, 22, { align: 'right' });
+
+  // Divider
+  doc.setFillColor(accent);
+  doc.rect(0, 36, pageW, 1.5, 'F');
+
+  // Addresses
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text('FROM', 12, 45);
+  doc.text('BILL TO', pageW / 2 + 4, 45);
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(v('bizName') || '', 12, 51);
+  doc.text(v('custName') || '', pageW / 2 + 4, 51);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90, 90, 90);
+  const bizLines = (v('bizAddr') || '').split('\n');
+  bizLines.forEach((l, i) => doc.text(l, 12, 57 + i * 5));
+  doc.text(v('bizPhone') || '', 12, 57 + bizLines.length * 5);
+
+  const custLines = (v('custAddr') || '').split('\n');
+  custLines.forEach((l, i) => doc.text(l, pageW / 2 + 4, 57 + i * 5));
+  doc.text(v('custPhone') || '', pageW / 2 + 4, 57 + custLines.length * 5);
+
+  // Dates row
+  let y = 80;
+  doc.setFillColor(245, 245, 245);
+  doc.rect(0, y - 4, pageW, 12, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(0,0,0);
+  doc.text('Bill Date: ' + (v('billDate') || ''), 12, y + 4);
+  doc.text('Due Date: ' + (v('dueDate') || ''), 70, y + 4);
+  doc.text('Payment: ' + (v('paymentMethod') || 'Cash'), 130, y + 4);
+
+  // Items table
+  y = 98;
+  const tableRows = items.map((it, i) => [
+    i + 1,
+    it.desc || '',
+    it.qty,
+    fmt(it.rate, t.cur),
+    fmt(it.qty * it.rate, t.cur)
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [['#', 'Description', 'Qty', 'Rate', 'Amount']],
+    body: tableRows,
+    styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica' },
+    headStyles: { fillColor: accent, textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [250, 250, 250] },
+    columnStyles: { 0: { cellWidth: 10 }, 4: { halign: 'right' }, 3: { halign: 'right' } },
+    margin: { left: 12, right: 12 },
+  });
+
+  y = doc.lastAutoTable.finalY + 6;
+
+  // Totals
+  const totLines = [
+    ['Subtotal', fmt(t.subtotal, t.cur)],
+    ...(t.discount > 0 ? [['Discount (' + v('discountRate') + '%)', '− ' + fmt(t.discount, t.cur)]] : []),
+    ...(t.tax > 0 ? [['Tax (' + v('taxRate') + '%)', fmt(t.tax, t.cur)]] : []),
+    ...(t.tip > 0 ? [['Service/Tip (' + v('tipRate') + '%)', fmt(t.tip, t.cur)]] : []),
+    ...(t.extra > 0 ? [[v('extraFeeLabel') || 'Extra', fmt(t.extra, t.cur)]] : []),
+  ];
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(80, 80, 80);
+  totLines.forEach(([label, val]) => {
+    doc.text(label, pageW - 70, y);
+    doc.text(val, pageW - 12, y, { align: 'right' });
+    y += 6;
+  });
+
+  doc.setDrawColor(0, 0, 0);
+  doc.line(pageW - 70, y - 1, pageW - 12, y - 1);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...hexToRgb(accent));
+  doc.text('Grand Total', pageW - 70, y + 5);
+  doc.text(fmt(t.grand, t.cur), pageW - 12, y + 5, { align: 'right' });
+  y += 12;
+
+  // Notes
+  if (v('billNotes')) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Note: ' + v('billNotes'), 12, y + 4);
+    y += 10;
+  }
+
+  // Footer
+  const pageH = doc.internal.pageSize.getHeight();
+  doc.setFillColor(accent);
+  doc.rect(0, pageH - 12, pageW, 12, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text((v('footerText') || '') + '  |  ' + (v('bizWeb') || ''), pageW / 2, pageH - 5, { align: 'center' });
+
+  doc.save(`${name}_${num}.pdf`);
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function downloadHTML(name, num) {
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${name} - ${num}</title>
+  <style>body{margin:0;padding:20px;background:#e8e4dc;display:flex;justify-content:center;}</style></head>
+  <body>${document.getElementById('billPreview').outerHTML}</body></html>`;
+  dl(html, `${name}_${num}.html`, 'text/html');
+}
+
+function downloadCSV(name, num) {
+  const t = calcTotals();
+  const rows = [
+    ['Invoice', v('invoiceNum')],
+    ['Date', v('billDate')],
+    ['Customer', v('custName')],
+    [''],
+    ['#', 'Description', 'Qty', 'Rate', 'Amount'],
+    ...items.map((it, i) => [i+1, it.desc, it.qty, it.rate.toFixed(2), (it.qty*it.rate).toFixed(2)]),
+    [''],
+    ['Subtotal', '', '', '', t.subtotal.toFixed(2)],
+    ['Tax', v('taxRate')+'%', '', '', t.tax.toFixed(2)],
+    ['Discount', v('discountRate')+'%', '', '', '-'+t.discount.toFixed(2)],
+    ['Service/Tip', v('tipRate')+'%', '', '', t.tip.toFixed(2)],
+    ['Grand Total', '', '', '', t.grand.toFixed(2)],
+  ];
+  const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl(csv, `${name}_${num}.csv`, 'text/csv');
+}
+
+function downloadJSON(name, num) {
+  const t = calcTotals();
+  const data = {
+    invoice: v('invoiceNum'), billType, date: v('billDate'), dueDate: v('dueDate'),
+    business: { name: v('bizName'), address: v('bizAddr'), phone: v('bizPhone'), email: v('bizEmail'), gst: v('bizTax') },
+    customer: { name: v('custName'), address: v('custAddr'), phone: v('custPhone'), email: v('custEmail') },
+    items: items.map(it => ({ ...it, total: it.qty * it.rate })),
+    totals: { subtotal: t.subtotal, discount: t.discount, tax: t.tax, tip: t.tip, extra: t.extra, grand: t.grand },
+    payment: { method: v('paymentMethod'), status: v('paymentStatus') },
+    notes: v('billNotes'),
+  };
+  dl(JSON.stringify(data, null, 2), `${name}_${num}.json`, 'application/json');
+}
+
+function downloadTXT(name, num) {
+  const t = calcTotals();
+  const line = '─'.repeat(50);
+  let txt = `${line}\n  ${(v('bizName')||'Business').toUpperCase()} — ${billType.toUpperCase()} BILL\n${line}\n`;
+  txt += `Invoice: ${v('invoiceNum')}   Date: ${v('billDate')}\n`;
+  txt += `Customer: ${v('custName')}\n${line}\n`;
+  txt += `${'#'.padEnd(4)}${'Description'.padEnd(24)}${'Qty'.padStart(5)}  ${'Rate'.padStart(10)}  ${'Amt'.padStart(12)}\n${line}\n`;
+  items.forEach((it, i) => {
+    txt += `${String(i+1).padEnd(4)}${(it.desc||'').substring(0,23).padEnd(24)}${String(it.qty).padStart(5)}  ${String(it.rate.toFixed(2)).padStart(10)}  ${String((it.qty*it.rate).toFixed(2)).padStart(12)}\n`;
+  });
+  txt += `${line}\n${'Subtotal'.padEnd(44)}${fmt(t.subtotal,t.cur).padStart(12)}\n`;
+  if(t.tax>0) txt+=`${'Tax ('+v('taxRate')+'%)'.padEnd(44)}${fmt(t.tax,t.cur).padStart(12)}\n`;
+  if(t.discount>0) txt+=`${'Discount ('+v('discountRate')+'%)'.padEnd(44)}${('-'+fmt(t.discount,t.cur)).padStart(12)}\n`;
+  txt += `${line}\n${'GRAND TOTAL'.padEnd(44)}${fmt(t.grand,t.cur).padStart(12)}\n${line}\n`;
+  txt += `\nPayment: ${v('paymentMethod')} | Status: ${v('paymentStatus')}\n`;
+  if(v('billNotes')) txt+=`\nNote: ${v('billNotes')}\n`;
+  txt+=`\n${v('footerText')||''}\n`;
+  dl(txt, `${name}_${num}.txt`, 'text/plain');
+}
+
+function dl(content, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function resetBill() {
+  if (confirm('Reset all fields to defaults?')) location.reload();
+}
+</script>
+</body>
+</html>
